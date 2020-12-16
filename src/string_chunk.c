@@ -115,7 +115,7 @@ static void upsertChunk(StringChunk *chunk, size_t idx, StringSample *sample) {
  * @param size
  * @return
  */
-ChunkResult String_UpsertSample(UpsertCtx *uCtx, int *size, DuplicatePolicy duplicatePolicy) {
+ChunkResult String_UpsertSample(UpsertCtxStr *uCtx, int *size, DuplicatePolicy duplicatePolicy) {
     *size = 0;
     StringChunk *regChunk = (StringChunk *)uCtx->inChunk;
     timestamp_t ts = uCtx->sample.timestamp;
@@ -161,7 +161,7 @@ ChunkIter_t *String_NewChunkIterator(Chunk_t *chunk,
     }
 
     if (retChunkIterClass != NULL) {
-        *retChunkIterClass = *GetChunkIteratorClass(CHUNK_REGULAR);
+        *retChunkIterClass = *GetChunkIteratorClass(CHUNK_STRING);
     }
 
     return (ChunkIter_t *)iter;

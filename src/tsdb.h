@@ -66,7 +66,7 @@ void FreeSeries(void *value);
 void CleanLastDeletedSeries(RedisModuleCtx *ctx, RedisModuleString *key);
 void FreeCompactionRule(void *value);
 size_t SeriesMemUsage(const void *value);
-int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value);
+int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value, char *stringValue, bool isString);
 int SeriesUpsertSample(Series *series, api_timestamp_t timestamp, double value, DuplicatePolicy dp_override);
 int SeriesUpdateLastSample(Series *series);
 int SeriesDeleteRule(Series *series, RedisModuleString *destKey);
@@ -79,7 +79,7 @@ size_t SeriesGetNumSamples(const Series *series);
 
 // Iterator over the series
 SeriesIterator SeriesQuery(Series *series, timestamp_t start_ts, timestamp_t end_ts, bool rev);
-ChunkResult SeriesIteratorGetNext(SeriesIterator *iterator, Sample *currentSample);
+ChunkResult SeriesIteratorGetNext(SeriesIterator *iterator, Sample *currentSample, StringSample *currentStringSample, bool isString);
 void SeriesIteratorClose(SeriesIterator *iterator);
 
 int SeriesCalcRange(Series *series,

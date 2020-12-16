@@ -52,6 +52,9 @@ Series *NewSeries(RedisModuleString *keyName, CreateCtx *cCtx) {
     if (newSeries->options & SERIES_OPT_UNCOMPRESSED) {
         newSeries->options |= SERIES_OPT_UNCOMPRESSED;
         newSeries->funcs = GetChunkClass(CHUNK_REGULAR);
+    } else if (newSeries->options & SERIES_OPT_STRING) {
+        newSeries->options |= SERIES_OPT_STRING;
+        newSeries->funcs = GetChunkClass(CHUNK_STRING);
     } else {
         newSeries->funcs = GetChunkClass(CHUNK_COMPRESSED);
     }
@@ -253,7 +256,7 @@ static void upsertCompaction(Series *series, UpsertCtx *uCtx) {
                 continue;
             }
             if (destSeries->totalSamples == 0) {
-                SeriesAddSample(destSeries, start, val);
+                SeriesAddSample(destSeries, start, val, NULL, false);
             } else {
                 SeriesUpsertSample(destSeries, start, val, DP_LAST);
             }
@@ -347,10 +350,18 @@ int SeriesUpsertSample(Series *series,
     return rv;
 }
 
-int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value) {
+int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value, char *stringValue, bool isString) {
     // backfilling or update
+    ChunkResult ret;
+    StringSample stringSample = { .timestamp = timestamp, .value = stringValue};
     Sample sample = { .timestamp = timestamp, .value = value };
-    ChunkResult ret = series->funcs->AddSample(series->lastChunk, &sample);
+    if (isString) {
+        stringSample.value = stringValue;
+        ret = series->funcs->AddSampleStr(series->lastChunk, &stringSample);
+    } else {
+        sample.value = value;
+        ret = series->funcs->AddSample(series->lastChunk, &sample);
+    }
 
     if (ret == CR_END) {
         // When a new chunk is created trim the series
@@ -358,11 +369,19 @@ int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value) {
 
         Chunk_t *newChunk = series->funcs->NewChunk(series->chunkSizeBytes);
         dictOperator(series->chunks, newChunk, timestamp, DICT_OP_SET);
-        ret = series->funcs->AddSample(newChunk, &sample);
+        if (isString) {
+            ret = series->funcs->AddSampleStr(newChunk, &stringSample);
+        } else {
+            ret = series->funcs->AddSample(newChunk, &sample);
+        }
         series->lastChunk = newChunk;
     }
     series->lastTimestamp = timestamp;
-    series->lastValue = value;
+    if (isString) {
+//        series->lastValueStr = stringValue;
+    } else {
+        series->lastValue = value;
+    }
     series->totalSamples++;
     return TSDB_OK;
 }
@@ -407,14 +426,22 @@ SeriesIterator SeriesQuery(Series *series, timestamp_t start_ts, timestamp_t end
 }
 
 // this is an internal function that routes the next call to the appropriate chunk iterator function
-static ChunkResult SeriesGetNext(SeriesIterator *iter, Sample *sample) {
+static ChunkResult SeriesGetNext(SeriesIterator *iter, Sample *sample, StringSample *stringSample, bool isString) {
     if (iter->reverse == false) {
-        return iter->chunkIteratorFuncs.GetNext(iter->chunkIterator, sample);
+        if (isString) {
+            return iter->chunkIteratorFuncs.GetNextStr(iter->chunkIterator, stringSample);
+        } else {
+            return iter->chunkIteratorFuncs.GetNext(iter->chunkIterator, sample);
+        }
     } else {
         if (iter->chunkIteratorFuncs.GetPrev == NULL) {
             return CR_ERR;
         }
-        return iter->chunkIteratorFuncs.GetPrev(iter->chunkIterator, sample);
+        if (isString) {
+            return iter->chunkIteratorFuncs.GetPrevStr(iter->chunkIterator, stringSample);
+        } else {
+            return iter->chunkIteratorFuncs.GetPrev(iter->chunkIterator, sample);
+        }
     }
 }
 
@@ -425,23 +452,23 @@ void SeriesIteratorClose(SeriesIterator *iterator) {
 
 // Fills sample from chunk. If all samples were extracted from the chunk, we
 // move to the next chunk.
-ChunkResult SeriesIteratorGetNext(SeriesIterator *iterator, Sample *currentSample) {
+ChunkResult SeriesIteratorGetNext(SeriesIterator *iterator, Sample *currentSample, StringSample *currentStringSample, bool isString) {
     ChunkResult res;
     ChunkFuncs *funcs = iterator->series->funcs;
     Chunk_t *currentChunk = iterator->currentChunk;
 
     while (true) {
-        res = SeriesGetNext(iterator, currentSample);
+        res = SeriesGetNext(iterator, currentSample, currentStringSample, isString);
         if (res == CR_END) { // Reached the end of the chunk
             if (!iterator->DictGetNext(iterator->dictIter, NULL, (void *)&currentChunk) ||
                 funcs->GetFirstTimestamp(currentChunk) > iterator->maxTimestamp ||
                 funcs->GetLastTimestamp(currentChunk) < iterator->minTimestamp) {
-                return CR_END; // No more chunks or they out of range
+                return CR_END; // No more chunks or they out of range/ string comes here
             }
             iterator->chunkIteratorFuncs.Free(iterator->chunkIterator);
             iterator->chunkIterator = funcs->NewChunkIterator(
                 currentChunk, SeriesChunkIteratorOptions(iterator), &iterator->chunkIteratorFuncs);
-            if (SeriesGetNext(iterator, currentSample) != CR_OK) {
+            if (SeriesGetNext(iterator, currentSample, currentStringSample, isString) != CR_OK) {
                 return CR_END;
             }
         } else if (res == CR_ERR) {
@@ -451,21 +478,41 @@ ChunkResult SeriesIteratorGetNext(SeriesIterator *iterator, Sample *currentSampl
         // check timestamp is within range
         if (!iterator->reverse) {
             // forward range handling
-            if (currentSample->timestamp < iterator->minTimestamp) {
+            if (isString) {
+                if (currentStringSample->timestamp < iterator->minTimestamp) {
+                    // didn't reach the starting point of the requested range
+                    continue;
+                }
+            } else if (currentSample->timestamp < iterator->minTimestamp){
                 // didn't reach the starting point of the requested range
                 continue;
             }
-            if (currentSample->timestamp > iterator->maxTimestamp) {
+            if (isString) {
+                if (currentStringSample->timestamp > iterator->maxTimestamp) {
+                    // reached the end of the requested range
+                    return CR_END;
+                }
+            } else if (currentSample->timestamp > iterator->maxTimestamp) {
                 // reached the end of the requested range
                 return CR_END;
             }
         } else {
             // reverse range handling
-            if (currentSample->timestamp > iterator->maxTimestamp) {
+            if (isString) {
+                if (currentStringSample->timestamp > iterator->maxTimestamp) {
+                    // didn't reach our starting range
+                    continue;
+                }
+            } else if (currentSample->timestamp > iterator->maxTimestamp) {
                 // didn't reach our starting range
                 continue;
             }
-            if (currentSample->timestamp < iterator->minTimestamp) {
+            if (isString) {
+                if (currentStringSample->timestamp < iterator->minTimestamp) {
+                    // didn't reach the starting point of the requested range
+                    return CR_END;
+                }
+            } else if (currentSample->timestamp < iterator->minTimestamp) {
                 // didn't reach the starting point of the requested range
                 return CR_END;
             }
@@ -624,7 +671,7 @@ int SeriesCalcRange(Series *series,
     }
     void *context = aggObject->createContext();
 
-    while (SeriesIteratorGetNext(&iterator, &sample) == CR_OK) {
+    while (SeriesIteratorGetNext(&iterator, &sample, NULL, false) == CR_OK) {
         aggObject->appendValue(context, sample.value);
     }
     SeriesIteratorClose(&iterator);
@@ -650,6 +697,8 @@ timestamp_t getFirstValidTimestamp(Series *series, long long *skipped) {
 
     size_t i = 0;
     Sample sample = { 0 };
+    StringSample stringSample = { 0 };
+    bool isString = series->options;
 
     timestamp_t minTimestamp = 0;
     if (series->retentionTime && series->retentionTime < series->lastTimestamp) {
@@ -657,10 +706,10 @@ timestamp_t getFirstValidTimestamp(Series *series, long long *skipped) {
     }
 
     SeriesIterator iterator = SeriesQuery(series, 0, series->lastTimestamp, FALSE);
-    ChunkResult result = SeriesIteratorGetNext(&iterator, &sample);
+    ChunkResult result = SeriesIteratorGetNext(&iterator, &sample, &stringSample, isString);
 
     while (result == CR_OK && sample.timestamp < minTimestamp) {
-        result = SeriesIteratorGetNext(&iterator, &sample);
+        result = SeriesIteratorGetNext(&iterator, &sample, &stringSample, isString);
         ++i;
     }
 

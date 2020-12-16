@@ -23,7 +23,7 @@ typedef struct Sample {
 
 typedef struct StringSample {
     timestamp_t timestamp;
-    char value;
+    char *value;
 } StringSample;
 
 typedef void Chunk_t;
@@ -68,6 +68,7 @@ typedef struct ChunkFuncs {
     ChunkResult(*AddSample)(Chunk_t *chunk, Sample *sample);
     ChunkResult(*AddSampleStr)(Chunk_t *chunk, StringSample *sample);
     ChunkResult(*UpsertSample)(UpsertCtx *uCtx, int *size, DuplicatePolicy duplicatePolicy);
+    ChunkResult(*UpsertSampleStr)(UpsertCtxStr *uCtx, int *size, DuplicatePolicy duplicatePolicy);
 
     ChunkIter_t *(*NewChunkIterator)(Chunk_t *chunk, int options, ChunkIterFuncs* retChunkIterClass);
 

@@ -51,7 +51,7 @@ ChunkResult String_AddSample(Chunk_t *chunk, StringSample *sample);
  * @param size
  * @return
  */
-ChunkResult String_UpsertSample(UpsertCtx *uCtx, int *size, DuplicatePolicy duplicatePolicy);
+ChunkResult String_UpsertSample(UpsertCtxStr *uCtx, int *size, DuplicatePolicy duplicatePolicy);
 
 u_int64_t String_NumOfSample(Chunk_t *chunk);
 timestamp_t String_GetLastTimestamp(Chunk_t *chunk);

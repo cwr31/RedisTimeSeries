@@ -165,6 +165,10 @@ static int parseCreateArgs(RedisModuleCtx *ctx,
         cCtx->options |= SERIES_OPT_UNCOMPRESSED;
     }
 
+    if (RMUtil_ArgIndex("STRING", argv, argc) > 0) {
+        cCtx->options |= SERIES_OPT_STRING;
+    }
+
     cCtx->duplicatePolicy = DP_NONE;
     if (ParseDuplicatePolicy(ctx, argv, argc, DUPLICATE_POLICY_ARG, &cCtx->duplicatePolicy) !=
         TSDB_OK) {
@@ -418,6 +422,15 @@ static void ReplyWithSample(RedisModuleCtx *ctx, u_int64_t timestamp, double val
     RedisModule_ReplyWithSimpleString(ctx, buf);
 }
 
+#define MAX_VAL_LEN 24
+static void ReplyWithStringSample(RedisModuleCtx *ctx, u_int64_t timestamp, char *value) {
+    RedisModule_ReplyWithArray(ctx, 2);
+    RedisModule_ReplyWithLongLong(ctx, timestamp);
+    char buf[MAX_VAL_LEN];
+    snprintf(buf, MAX_VAL_LEN, "%s", value);
+    RedisModule_ReplyWithSimpleString(ctx, buf);
+}
+
 void ReplyWithSeriesLastDatapoint(RedisModuleCtx *ctx, const Series *series) {
     if (SeriesGetNumSamples(series) == 0) {
         RedisModule_ReplyWithArray(ctx, 0);
@@ -655,6 +668,8 @@ int ReplySeriesRange(RedisModuleCtx *ctx,
                      long long maxResults,
                      bool rev) {
     Sample sample;
+    StringSample  stringSample;
+    bool isString = series->options;
     void *context = NULL;
     long long arraylen = 0;
     timestamp_t last_agg_timestamp;
@@ -679,9 +694,13 @@ int ReplySeriesRange(RedisModuleCtx *ctx,
     RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
     if (aggObject == NULL) {
         // No aggregation
-        while (SeriesIteratorGetNext(&iterator, &sample) == CR_OK &&
+        while (SeriesIteratorGetNext(&iterator, &sample, &stringSample, isString) == CR_OK &&
                (maxResults == -1 || arraylen < maxResults)) {
-            ReplyWithSample(ctx, sample.timestamp, sample.value);
+            if (isString) {
+                ReplyWithStringSample(ctx, sample.timestamp, stringSample.value);
+            } else {
+                ReplyWithSample(ctx, sample.timestamp, sample.value);
+            }
             arraylen++;
         }
     } else {
@@ -693,7 +712,7 @@ int ReplySeriesRange(RedisModuleCtx *ctx,
                                   : series->funcs->GetLastTimestamp(iterator.currentChunk);
         last_agg_timestamp = init_ts - (init_ts % time_delta);
 
-        while (SeriesIteratorGetNext(&iterator, &sample) == CR_OK &&
+        while (SeriesIteratorGetNext(&iterator, &sample, &stringSample, isString) == CR_OK &&
                (maxResults == -1 || arraylen < maxResults)) {
             if ((iterator.reverse == false &&
                  sample.timestamp >= last_agg_timestamp + time_delta) ||
@@ -754,7 +773,7 @@ static void handleCompaction(RedisModuleCtx *ctx,
 
         double aggVal;
         if (rule->aggClass->finalize(rule->aggContext, &aggVal) == TSDB_OK) {
-            SeriesAddSample(destSeries, rule->startCurrentTimeBucket, aggVal);
+            SeriesAddSample(destSeries, rule->startCurrentTimeBucket, aggVal, NULL, false);
         }
         rule->aggClass->resetContext(rule->aggContext);
         rule->startCurrentTimeBucket = currentTimestamp;
@@ -767,7 +786,9 @@ static int internalAdd(RedisModuleCtx *ctx,
                        Series *series,
                        api_timestamp_t timestamp,
                        double value,
-                       DuplicatePolicy dp_override) {
+                       DuplicatePolicy dp_override,
+                       char *stringValue,
+                       bool isString) {
     timestamp_t lastTS = series->lastTimestamp;
     uint64_t retention = series->retentionTime;
     // ensure inside retention period.
@@ -775,7 +796,7 @@ static int internalAdd(RedisModuleCtx *ctx,
         RTS_ReplyGeneralError(ctx, "TSDB: Timestamp is older than retention");
         return REDISMODULE_ERR;
     }
-
+    // TODO SeriesUpsertSample + string
     if (timestamp <= series->lastTimestamp && series->totalSamples != 0) {
         if (SeriesUpsertSample(series, timestamp, value, dp_override) != REDISMODULE_OK) {
             RTS_ReplyGeneralError(ctx,
@@ -783,7 +804,7 @@ static int internalAdd(RedisModuleCtx *ctx,
             return REDISMODULE_ERR;
         }
     } else {
-        if (SeriesAddSample(series, timestamp, value) != REDISMODULE_OK) {
+        if (SeriesAddSample(series, timestamp, value, stringValue, isString) != REDISMODULE_OK) {
             RTS_ReplyGeneralError(ctx, "TSDB: Error at add");
             return REDISMODULE_ERR;
         }
@@ -806,9 +827,10 @@ static inline int add(RedisModuleCtx *ctx,
                       int argc) {
     RedisModuleKey *key = RedisModule_OpenKey(ctx, keyName, REDISMODULE_READ | REDISMODULE_WRITE);
     double value;
+    char *stringValue;
     api_timestamp_t timestamp;
-    if ((RedisModule_StringToDouble(valueStr, &value) != REDISMODULE_OK))
-        return RTS_ReplyGeneralError(ctx, "TSDB: invalid value");
+//    if ((RedisModule_StringToDouble(valueStr, &value) != REDISMODULE_OK))
+//        return RTS_ReplyGeneralError(ctx, "TSDB: invalid value");
 
     if ((RedisModule_StringToLongLong(timestampStr, (long long int *)&timestamp) !=
          REDISMODULE_OK)) {
@@ -839,7 +861,13 @@ static inline int add(RedisModuleCtx *ctx,
             return REDISMODULE_ERR;
         }
     }
-    int rv = internalAdd(ctx, series, timestamp, value, dp);
+    bool isString = series->options;
+    if (isString) {
+        stringValue = (char *) valueStr;
+    } else {
+        RedisModule_StringToDouble(valueStr, &value);
+    }
+    int rv = internalAdd(ctx, series, timestamp, value, dp, stringValue, isString);
     RedisModule_CloseKey(key);
     return rv;
 }
@@ -1140,7 +1168,7 @@ int TSDB_incrby(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         result -= incrby;
     }
 
-    int rv = internalAdd(ctx, series, currentUpdatedTime, result, DP_LAST);
+    int rv = internalAdd(ctx, series, currentUpdatedTime, result, DP_LAST, NULL, false);
     RedisModule_ReplicateVerbatim(ctx);
     RedisModule_CloseKey(key);
     return rv;

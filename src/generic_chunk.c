@@ -64,7 +64,7 @@ static ChunkFuncs strChunk = {
         .SplitChunk = String_SplitChunk,
 
         .AddSampleStr = String_AddSample,
-        .UpsertSample = String_UpsertSample,
+        .UpsertSampleStr = String_UpsertSample,
 
         .NewChunkIterator = String_NewChunkIterator,
 
