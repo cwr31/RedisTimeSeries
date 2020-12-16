@@ -23,7 +23,7 @@ typedef struct Sample {
 
 typedef struct StringSample {
     timestamp_t timestamp;
-    char *value;
+    RedisModuleString *value;
 } StringSample;
 
 typedef void Chunk_t;

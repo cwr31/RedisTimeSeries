@@ -350,7 +350,7 @@ int SeriesUpsertSample(Series *series,
     return rv;
 }
 
-int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value, char *stringValue, bool isString) {
+int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value, RedisModuleString *stringValue, bool isString) {
     // backfilling or update
     ChunkResult ret;
     StringSample stringSample = { .timestamp = timestamp, .value = stringValue};

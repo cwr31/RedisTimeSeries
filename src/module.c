@@ -423,12 +423,10 @@ static void ReplyWithSample(RedisModuleCtx *ctx, u_int64_t timestamp, double val
 }
 
 #define MAX_VAL_LEN 24
-static void ReplyWithStringSample(RedisModuleCtx *ctx, u_int64_t timestamp, char *value) {
+static void ReplyWithStringSample(RedisModuleCtx *ctx, u_int64_t timestamp, RedisModuleString *value) {
     RedisModule_ReplyWithArray(ctx, 2);
     RedisModule_ReplyWithLongLong(ctx, timestamp);
-    char buf[MAX_VAL_LEN];
-    snprintf(buf, MAX_VAL_LEN, "%s", value);
-    RedisModule_ReplyWithSimpleString(ctx, buf);
+    RedisModule_ReplyWithString(ctx, value);
 }
 
 void ReplyWithSeriesLastDatapoint(RedisModuleCtx *ctx, const Series *series) {
@@ -787,7 +785,7 @@ static int internalAdd(RedisModuleCtx *ctx,
                        api_timestamp_t timestamp,
                        double value,
                        DuplicatePolicy dp_override,
-                       char *stringValue,
+                       RedisModuleString *stringValue,
                        bool isString) {
     timestamp_t lastTS = series->lastTimestamp;
     uint64_t retention = series->retentionTime;
@@ -863,11 +861,11 @@ static inline int add(RedisModuleCtx *ctx,
     }
     bool isString = series->options;
     if (isString) {
-        stringValue = (char *) valueStr;
+//        stringValue = (char *) valueStr;
     } else {
         RedisModule_StringToDouble(valueStr, &value);
     }
-    int rv = internalAdd(ctx, series, timestamp, value, dp, stringValue, isString);
+    int rv = internalAdd(ctx, series, timestamp, value, dp, valueStr, isString);
     RedisModule_CloseKey(key);
     return rv;
 }
