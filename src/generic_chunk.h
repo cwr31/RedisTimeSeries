@@ -16,10 +16,19 @@
 
 struct RedisModuleIO;
 
-typedef struct Sample {
+typedef struct AbstractSample {
     timestamp_t timestamp;
+}AbstractSample;
+
+typedef struct Sample {
+    struct AbstractSample as;
     double value;
 } Sample;
+
+typedef struct StringSample {
+    struct AbstractSample as;
+    char value;
+} StringSample;
 
 typedef void Chunk_t;
 typedef void ChunkIter_t;
@@ -32,7 +41,8 @@ typedef void ChunkIter_t;
 
 typedef enum {
     CHUNK_REGULAR,
-    CHUNK_COMPRESSED 
+    CHUNK_COMPRESSED,
+    CHUNK_STRING
 } CHUNK_TYPES_T;
 
 typedef struct UpsertCtx {
@@ -40,10 +50,17 @@ typedef struct UpsertCtx {
     Chunk_t *inChunk;       // original chunk  
 } UpsertCtx;
 
+typedef struct UpsertCtxStr {
+    StringSample sample;
+    Chunk_t *inChunk;       // original chunk
+} UpsertCtxStr;
+
 typedef struct ChunkIterFuncs {
     void(*Free)(ChunkIter_t *iter);
     ChunkResult(*GetNext)(ChunkIter_t *iter, Sample *sample);
+    ChunkResult(*GetNextStr)(ChunkIter_t *iter, StringSample *sample);
     ChunkResult(*GetPrev)(ChunkIter_t *iter, Sample *sample);
+    ChunkResult(*GetPrevStr)(ChunkIter_t *iter, StringSample *sample);
 } ChunkIterFuncs;
 
 
@@ -53,6 +70,7 @@ typedef struct ChunkFuncs {
     Chunk_t *(*SplitChunk)(Chunk_t *chunk);
 
     ChunkResult(*AddSample)(Chunk_t *chunk, Sample *sample);
+    ChunkResult(*AddSampleStr)(Chunk_t *chunk, StringSample *sample);
     ChunkResult(*UpsertSample)(UpsertCtx *uCtx, int *size, DuplicatePolicy duplicatePolicy);
 
     ChunkIter_t *(*NewChunkIterator)(Chunk_t *chunk, int options, ChunkIterFuncs* retChunkIterClass);
@@ -67,6 +85,7 @@ typedef struct ChunkFuncs {
 } ChunkFuncs;
 
 ChunkResult handleDuplicateSample(DuplicatePolicy policy, Sample oldSample, Sample *newSample);
+ChunkResult handleDuplicateSampleStr(DuplicatePolicy policy, StringSample oldSample, StringSample *newSample);
 const char * DuplicatePolicyToString(DuplicatePolicy policy);
 int RMStringLenDuplicationPolicyToEnum(RedisModuleString *aggTypeStr);
 DuplicatePolicy DuplicatePolicyFromString(const char *input, size_t len);

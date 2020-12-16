@@ -2,6 +2,7 @@
 
 #include "chunk.h"
 #include "compressed_chunk.h"
+#include "string_chunk.h"
 
 #include <ctype.h>
 #include "rmutil/alloc.h"
@@ -57,6 +58,31 @@ static ChunkIterFuncs compressedChunkIteratorClass = {
     .GetPrev = NULL,
 };
 
+static ChunkFuncs strChunk = {
+        .NewChunk = String_NewChunk,
+        .FreeChunk = String_FreeChunk,
+        .SplitChunk = String_SplitChunk,
+
+        .AddSampleStr = String_AddSample,
+        .UpsertSample = String_UpsertSample,
+
+        .NewChunkIterator = String_NewChunkIterator,
+
+        .GetChunkSize = String_GetChunkSize,
+        .GetNumOfSample = String_NumOfSample,
+        .GetLastTimestamp = String_GetLastTimestamp,
+        .GetFirstTimestamp = String_GetFirstTimestamp,
+
+        .SaveToRDB = String_SaveToRDB,
+        .LoadFromRDB = String_LoadFromRDB,
+};
+
+static ChunkIterFuncs stringChunkIteratorClass = {
+        .Free = String_FreeChunkIterator,
+        .GetNextStr = String_ChunkIteratorGetNext,
+        .GetPrevStr = String_ChunkIteratorGetPrev,
+};
+
 // This function will decide according to the policy how to handle duplicate sample, the `newSample`
 // will contain the data that will be kept in the database.
 ChunkResult handleDuplicateSample(DuplicatePolicy policy, Sample oldSample, Sample *newSample) {
@@ -84,12 +110,29 @@ ChunkResult handleDuplicateSample(DuplicatePolicy policy, Sample oldSample, Samp
     }
 }
 
+
+ChunkResult handleDuplicateSampleStr(DuplicatePolicy policy, StringSample oldSample, StringSample *newSample) {
+    switch (policy) {
+        case DP_BLOCK:
+            return CR_ERR;
+        case DP_FIRST:
+            *newSample = oldSample;
+            return CR_OK;
+        case DP_LAST:
+            return CR_OK;
+        default:
+            return CR_ERR;
+    }
+}
+
 ChunkFuncs *GetChunkClass(CHUNK_TYPES_T chunkType) {
     switch (chunkType) {
         case CHUNK_REGULAR:
             return &regChunk;
         case CHUNK_COMPRESSED:
             return &comprChunk;
+        case CHUNK_STRING:
+            return &strChunk;
     }
     return NULL;
 }
@@ -100,6 +143,8 @@ ChunkIterFuncs *GetChunkIteratorClass(CHUNK_TYPES_T chunkType) {
             return &uncompressedChunkIteratorClass;
         case CHUNK_COMPRESSED:
             return &compressedChunkIteratorClass;
+        case CHUNK_STRING:
+            return &stringChunkIteratorClass;
     }
     return NULL;
 }

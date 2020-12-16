@@ -96,6 +96,7 @@ _SOURCES=\
 	chunk.c \
 	compaction.c \
 	compressed_chunk.c \
+	string_chunk.c \
 	config.c \
 	generic_chunk.c \
 	gorilla.c \
