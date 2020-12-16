@@ -16,17 +16,13 @@
 
 struct RedisModuleIO;
 
-typedef struct AbstractSample {
-    timestamp_t timestamp;
-}AbstractSample;
-
 typedef struct Sample {
-    struct AbstractSample as;
+    timestamp_t timestamp;
     double value;
 } Sample;
 
 typedef struct StringSample {
-    struct AbstractSample as;
+    timestamp_t timestamp;
     char value;
 } StringSample;
 
