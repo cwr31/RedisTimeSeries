@@ -9,7 +9,7 @@
 #include "string_chunk.h"
 
 Chunk_t *String_NewChunk(size_t size) {
-    Chunk *newChunk = (Chunk *)malloc(sizeof(Chunk));
+    StringChunk *newChunk = (StringChunk *)malloc(sizeof(StringChunk));
     newChunk->num_samples = 0;
     newChunk->size = size;
     newChunk->samples = (Sample *)malloc(size);
@@ -18,7 +18,7 @@ Chunk_t *String_NewChunk(size_t size) {
 }
 
 void String_FreeChunk(Chunk_t *chunk) {
-    free(((Chunk *)chunk)->samples);
+    free(((StringChunk *)chunk)->samples);
     free(chunk);
 }
 
@@ -28,12 +28,12 @@ void String_FreeChunk(Chunk_t *chunk) {
  * @return
  */
 Chunk_t *String_SplitChunk(Chunk_t *chunk) {
-    Chunk *curChunk = (Chunk *)chunk;
+    StringChunk *curChunk = (StringChunk *)chunk;
     size_t split = curChunk->num_samples / 2;
     size_t curNumSamples = curChunk->num_samples - split;
 
     // create chunk and copy samples
-    Chunk *newChunk = String_NewChunk(split * SAMPLE_SIZE);
+    StringChunk *newChunk = String_NewChunk(split * SAMPLE_SIZE);
     for (size_t i = 0; i < split; ++i) {
         Sample *sample = &curChunk->samples[curNumSamples + i];
         String_AddSample(newChunk, sample);
@@ -47,34 +47,34 @@ Chunk_t *String_SplitChunk(Chunk_t *chunk) {
     return newChunk;
 }
 
-static int IsChunkFull(Chunk *chunk) {
+static int IsChunkFull(StringChunk *chunk) {
     return chunk->num_samples == chunk->size / SAMPLE_SIZE;
 }
 
 u_int64_t String_NumOfSample(Chunk_t *chunk) {
-    return ((Chunk *)chunk)->num_samples;
+    return ((StringChunk *)chunk)->num_samples;
 }
 
-static Sample *ChunkGetSample(Chunk *chunk, int index) {
+static Sample *ChunkGetSample(StringChunk *chunk, int index) {
     return &chunk->samples[index];
 }
 
 timestamp_t String_GetLastTimestamp(Chunk_t *chunk) {
-    if (((Chunk *)chunk)->num_samples == 0) {
+    if (((StringChunk *)chunk)->num_samples == 0) {
         return -1;
     }
-    return ChunkGetSample(chunk, ((Chunk *)chunk)->num_samples - 1)->timestamp;
+    return ChunkGetSample(chunk, ((StringChunk *)chunk)->num_samples - 1)->timestamp;
 }
 
 timestamp_t String_GetFirstTimestamp(Chunk_t *chunk) {
-    if (((Chunk *)chunk)->num_samples == 0) {
+    if (((StringChunk *)chunk)->num_samples == 0) {
         return -1;
     }
     return ChunkGetSample(chunk, 0)->timestamp;
 }
 
 ChunkResult String_AddSample(Chunk_t *chunk, Sample *sample) {
-    Chunk *regChunk = (Chunk *)chunk;
+    StringChunk *regChunk = (StringChunk *)chunk;
     if (IsChunkFull(regChunk)) {
         return CR_END;
     }
@@ -84,7 +84,14 @@ ChunkResult String_AddSample(Chunk_t *chunk, Sample *sample) {
         regChunk->base_timestamp = sample->timestamp;
     }
 
-    regChunk->samples[regChunk->num_samples] = *sample;
+//    regChunk->samples[regChunk->num_samples] = *sample;
+    regChunk->samples[regChunk->num_samples].timestamp = sample->timestamp;
+    char zero[1];
+    strcat(((char *)sample->value), zero);
+    size_t len = strlen(((char *)sample->value));
+    memcpy(regChunk->samples[regChunk->num_samples].value, sample->value, len);
+//    regChunk->samples[regChunk->num_samples].value = ((char *)sample->value);
+//    memcpy(regChunk->samples[regChunk->num_samples].value, sample->value, strlen((const char *)sample->value));
     regChunk->num_samples++;
 
     return CR_OK;
@@ -96,7 +103,7 @@ ChunkResult String_AddSample(Chunk_t *chunk, Sample *sample) {
  * @param idx
  * @param sample
  */
-static void upsertChunk(Chunk *chunk, size_t idx, Sample *sample) {
+static void upsertChunk(StringChunk *chunk, size_t idx, Sample *sample) {
     if (chunk->num_samples == chunk->size / SAMPLE_SIZE) {
         chunk->size += sizeof(Sample);
         chunk->samples = realloc(chunk->samples, chunk->size);
@@ -118,7 +125,7 @@ static void upsertChunk(Chunk *chunk, size_t idx, Sample *sample) {
  */
 ChunkResult String_UpsertSample(UpsertCtx *uCtx, int *size, DuplicatePolicy duplicatePolicy) {
     *size = 0;
-    Chunk *regChunk = (Chunk *)uCtx->inChunk;
+    StringChunk *regChunk = (StringChunk *)uCtx->inChunk;
     timestamp_t ts = uCtx->sample.timestamp;
     short numSamples = regChunk->num_samples;
     // find sample location
@@ -162,7 +169,7 @@ ChunkIter_t *String_NewChunkIterator(Chunk_t *chunk,
     }
 
     if (retChunkIterClass != NULL) {
-        *retChunkIterClass = *GetChunkIteratorClass(CHUNK_REGULAR);
+        *retChunkIterClass = *GetChunkIteratorClass(CHUNK_STRING);
     }
 
     return (ChunkIter_t *)iter;
@@ -172,6 +179,8 @@ ChunkResult String_ChunkIteratorGetNext(ChunkIter_t *iterator, Sample *sample) {
     StringChunkIterator *iter = (StringChunkIterator *)iterator;
     if (iter->currentIndex < iter->chunk->num_samples) {
         *sample = *ChunkGetSample(iter->chunk, iter->currentIndex);
+//        memcpy(sample->value, ChunkGetSample(iter->chunk, iter->currentIndex)->value,
+//               strlen(ChunkGetSample(iter->chunk, iter->currentIndex)->value));
         iter->currentIndex++;
         return CR_OK;
     } else {
@@ -199,14 +208,14 @@ void String_FreeChunkIterator(ChunkIter_t *iterator) {
 }
 
 size_t String_GetChunkSize(Chunk_t *chunk, bool includeStruct) {
-    Chunk *uncompChunk = chunk;
+    StringChunk *uncompChunk = chunk;
     size_t size = uncompChunk->size;
     size += includeStruct ? sizeof(*uncompChunk) : 0;
     return size;
 }
 
 void String_SaveToRDB(Chunk_t *chunk, struct RedisModuleIO *io) {
-    Chunk *uncompchunk = chunk;
+    StringChunk *uncompchunk = chunk;
 
     RedisModule_SaveUnsigned(io, uncompchunk->base_timestamp);
     RedisModule_SaveUnsigned(io, uncompchunk->num_samples);
@@ -216,7 +225,7 @@ void String_SaveToRDB(Chunk_t *chunk, struct RedisModuleIO *io) {
 }
 
 void String_LoadFromRDB(Chunk_t **chunk, struct RedisModuleIO *io) {
-    Chunk *uncompchunk = (Chunk *)malloc(sizeof(*uncompchunk));
+    StringChunk *uncompchunk = (StringChunk *)malloc(sizeof(*uncompchunk));
 
     uncompchunk->base_timestamp = RedisModule_LoadUnsigned(io);
     uncompchunk->num_samples = RedisModule_LoadUnsigned(io);

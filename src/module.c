@@ -848,7 +848,8 @@ static inline int add(RedisModuleCtx *ctx,
     }
     bool isString = series->options & SERIES_OPT_STRING;
     if(isString) {
-        value = valueStr;
+        size_t len;
+        value = (void *) RedisModule_StringPtrLen(valueStr, &len);
     } else {
         if ((RedisModule_StringToDouble(valueStr, (double *) &value) != REDISMODULE_OK))
             return RTS_ReplyGeneralError(ctx, "TSDB: invalid value");
