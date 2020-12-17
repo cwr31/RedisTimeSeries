@@ -82,8 +82,9 @@ ChunkResult String_AddSample(Chunk_t *chunk, StringSample *sample) {
         // initialize base_timestamp
         regChunk->base_timestamp = sample->timestamp;
     }
-
+    // give sample value to
     regChunk->samples[regChunk->num_samples] = *sample;
+    regChunk->samples[regChunk->num_samples].value = (sample->value);
     regChunk->num_samples++;
 
     return CR_OK;

@@ -15,6 +15,7 @@ typedef struct StringChunk {
     StringSample *samples;
     unsigned int num_samples;
     size_t size;
+    int mem;
 } StringChunk;
 
 typedef struct StringChunkIterator {

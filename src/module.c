@@ -422,11 +422,10 @@ static void ReplyWithSample(RedisModuleCtx *ctx, u_int64_t timestamp, double val
     RedisModule_ReplyWithSimpleString(ctx, buf);
 }
 
-#define MAX_VAL_LEN 24
-static void ReplyWithStringSample(RedisModuleCtx *ctx, u_int64_t timestamp, RedisModuleString *value) {
+static void ReplyWithStringSample(RedisModuleCtx *ctx, u_int64_t timestamp, const char *value) {
     RedisModule_ReplyWithArray(ctx, 2);
     RedisModule_ReplyWithLongLong(ctx, timestamp);
-    RedisModule_ReplyWithString(ctx, value);
+    RedisModule_ReplyWithCString(ctx, value);
 }
 
 void ReplyWithSeriesLastDatapoint(RedisModuleCtx *ctx, const Series *series) {
@@ -785,7 +784,7 @@ static int internalAdd(RedisModuleCtx *ctx,
                        api_timestamp_t timestamp,
                        double value,
                        DuplicatePolicy dp_override,
-                       RedisModuleString *stringValue,
+                       const char *stringValue,
                        bool isString) {
     timestamp_t lastTS = series->lastTimestamp;
     uint64_t retention = series->retentionTime;
@@ -825,7 +824,7 @@ static inline int add(RedisModuleCtx *ctx,
                       int argc) {
     RedisModuleKey *key = RedisModule_OpenKey(ctx, keyName, REDISMODULE_READ | REDISMODULE_WRITE);
     double value;
-    char *stringValue;
+    const char *stringValue;
     api_timestamp_t timestamp;
 //    if ((RedisModule_StringToDouble(valueStr, &value) != REDISMODULE_OK))
 //        return RTS_ReplyGeneralError(ctx, "TSDB: invalid value");
@@ -861,11 +860,12 @@ static inline int add(RedisModuleCtx *ctx,
     }
     bool isString = series->options;
     if (isString) {
-//        stringValue = (char *) valueStr;
+        size_t len;
+        stringValue =  RedisModule_StringPtrLen(valueStr, &len);
     } else {
         RedisModule_StringToDouble(valueStr, &value);
     }
-    int rv = internalAdd(ctx, series, timestamp, value, dp, valueStr, isString);
+    int rv = internalAdd(ctx, series, timestamp, value, dp, stringValue, isString);
     RedisModule_CloseKey(key);
     return rv;
 }
