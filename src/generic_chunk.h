@@ -18,7 +18,7 @@ struct RedisModuleIO;
 
 typedef struct Sample {
     timestamp_t timestamp;
-    double value;
+    void *value;
 } Sample;
 
 typedef struct StringSample {

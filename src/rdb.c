@@ -97,7 +97,7 @@ void *series_rdb_load(RedisModuleIO *io, int encver) {
         series->totalSamples = totalSamples;
         series->srcKey = srcKey;
         series->lastTimestamp = lastTimestamp;
-        series->lastValue = lastValue;
+        series->lastValue = &lastValue;
         series->lastChunk = chunk;
     }
 
@@ -122,7 +122,7 @@ void series_rdb_save(RedisModuleIO *io, void *value) {
     RedisModule_SaveUnsigned(io, series->chunkSizeBytes);
     RedisModule_SaveUnsigned(io, series->options);
     RedisModule_SaveUnsigned(io, series->lastTimestamp);
-    RedisModule_SaveDouble(io, series->lastValue);
+    RedisModule_SaveDouble(io, *((double *) series->lastValue));
     RedisModule_SaveUnsigned(io, series->totalSamples);
     if (series->srcKey != NULL) {
         RedisModule_SaveUnsigned(io, TRUE);
