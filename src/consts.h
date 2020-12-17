@@ -61,6 +61,7 @@ typedef enum DuplicatePolicy {
 
 /* Series struct options */
 #define SERIES_OPT_UNCOMPRESSED 0x1
+#define SERIES_OPT_STRING 0x2
 
 /* Chunk enum */
 typedef enum {

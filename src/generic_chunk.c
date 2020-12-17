@@ -5,6 +5,7 @@
 
 #include <ctype.h>
 #include "rmutil/alloc.h"
+#include "string_chunk.h"
 
 static ChunkFuncs regChunk = {
     .NewChunk = Uncompressed_NewChunk,
@@ -57,6 +58,31 @@ static ChunkIterFuncs compressedChunkIteratorClass = {
     .GetPrev = NULL,
 };
 
+static ChunkFuncs stringChunk = {
+        .NewChunk = String_NewChunk,
+        .FreeChunk = String_FreeChunk,
+        .SplitChunk = String_SplitChunk,
+
+        .AddSample = String_AddSample,
+        .UpsertSample = String_UpsertSample,
+
+        .NewChunkIterator = String_NewChunkIterator,
+
+        .GetChunkSize = String_GetChunkSize,
+        .GetNumOfSample = String_NumOfSample,
+        .GetLastTimestamp = String_GetLastTimestamp,
+        .GetFirstTimestamp = String_GetFirstTimestamp,
+
+        .SaveToRDB = String_SaveToRDB,
+        .LoadFromRDB = String_LoadFromRDB,
+};
+
+static ChunkIterFuncs stringChunkIteratorClass = {
+        .Free = String_FreeChunkIterator,
+        .GetNext = String_ChunkIteratorGetNext,
+        .GetPrev = String_ChunkIteratorGetPrev,
+};
+
 // This function will decide according to the policy how to handle duplicate sample, the `newSample`
 // will contain the data that will be kept in the database.
 ChunkResult handleDuplicateSample(DuplicatePolicy policy, Sample oldSample, Sample *newSample) {
@@ -90,6 +116,8 @@ ChunkFuncs *GetChunkClass(CHUNK_TYPES_T chunkType) {
             return &regChunk;
         case CHUNK_COMPRESSED:
             return &comprChunk;
+        case CHUNK_STRING:
+            return &stringChunk;
     }
     return NULL;
 }
@@ -100,6 +128,8 @@ ChunkIterFuncs *GetChunkIteratorClass(CHUNK_TYPES_T chunkType) {
             return &uncompressedChunkIteratorClass;
         case CHUNK_COMPRESSED:
             return &compressedChunkIteratorClass;
+        case CHUNK_STRING:
+            return &stringChunkIteratorClass;
     }
     return NULL;
 }

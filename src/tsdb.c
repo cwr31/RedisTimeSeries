@@ -52,6 +52,9 @@ Series *NewSeries(RedisModuleString *keyName, CreateCtx *cCtx) {
     if (newSeries->options & SERIES_OPT_UNCOMPRESSED) {
         newSeries->options |= SERIES_OPT_UNCOMPRESSED;
         newSeries->funcs = GetChunkClass(CHUNK_REGULAR);
+    } else if (newSeries->options & SERIES_OPT_STRING) {
+        newSeries->options |= SERIES_OPT_STRING;
+        newSeries->funcs = GetChunkClass(CHUNK_STRING);
     } else {
         newSeries->funcs = GetChunkClass(CHUNK_COMPRESSED);
     }
@@ -253,9 +256,9 @@ static void upsertCompaction(Series *series, UpsertCtx *uCtx) {
                 continue;
             }
             if (destSeries->totalSamples == 0) {
-                SeriesAddSample(destSeries, start, val);
+                SeriesAddSample(destSeries, start, &val);
             } else {
-                SeriesUpsertSample(destSeries, start, val, DP_LAST);
+                SeriesUpsertSample(destSeries, start, &val, DP_LAST);
             }
             RedisModule_CloseKey(key);
         }
@@ -266,7 +269,7 @@ static void upsertCompaction(Series *series, UpsertCtx *uCtx) {
 
 int SeriesUpsertSample(Series *series,
                        api_timestamp_t timestamp,
-                       double value,
+                       void *value,
                        DuplicatePolicy dp_override) {
     bool latestChunk = true;
     void *chunkKey = NULL;
@@ -312,7 +315,7 @@ int SeriesUpsertSample(Series *series,
 
     UpsertCtx uCtx = {
         .inChunk = chunk,
-        .sample = { .timestamp = timestamp, .value = &value },
+        .sample = { .timestamp = timestamp, .value = value },
     };
 
     int size = 0;
@@ -347,9 +350,9 @@ int SeriesUpsertSample(Series *series,
     return rv;
 }
 
-int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value) {
+int SeriesAddSample(Series *series, api_timestamp_t timestamp, void *value) {
     // backfilling or update
-    Sample sample = { .timestamp = timestamp, .value = &value };
+    Sample sample = { .timestamp = timestamp, .value = value };
     ChunkResult ret = series->funcs->AddSample(series->lastChunk, &sample);
 
     if (ret == CR_END) {
@@ -362,7 +365,7 @@ int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value) {
         series->lastChunk = newChunk;
     }
     series->lastTimestamp = timestamp;
-    series->lastValue = &value;
+    series->lastValue = value;
     series->totalSamples++;
     return TSDB_OK;
 }
@@ -617,6 +620,7 @@ int SeriesCalcRange(Series *series,
                     double *val) {
     AggregationClass *aggObject = rule->aggClass;
 
+    bool isString = series->options & SERIES_OPT_STRING;
     Sample sample = { 0 };
     SeriesIterator iterator = SeriesQuery(series, start_ts, end_ts, false);
     if (iterator.series == NULL) {
