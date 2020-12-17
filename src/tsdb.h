@@ -39,7 +39,7 @@ typedef struct Series {
     short options;
     CompactionRule *rules;
     timestamp_t lastTimestamp;
-    double lastValue;
+    void *lastValue;
     Label *labels;
     RedisModuleString *keyName;
     size_t labelsCount;

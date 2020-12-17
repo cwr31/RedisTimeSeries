@@ -312,7 +312,7 @@ int SeriesUpsertSample(Series *series,
 
     UpsertCtx uCtx = {
         .inChunk = chunk,
-        .sample = { .timestamp = timestamp, .value = value },
+        .sample = { .timestamp = timestamp, .value = &value },
     };
 
     int size = 0;
@@ -349,7 +349,7 @@ int SeriesUpsertSample(Series *series,
 
 int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value) {
     // backfilling or update
-    Sample sample = { .timestamp = timestamp, .value = value };
+    Sample sample = { .timestamp = timestamp, .value = &value };
     ChunkResult ret = series->funcs->AddSample(series->lastChunk, &sample);
 
     if (ret == CR_END) {
@@ -362,7 +362,7 @@ int SeriesAddSample(Series *series, api_timestamp_t timestamp, double value) {
         series->lastChunk = newChunk;
     }
     series->lastTimestamp = timestamp;
-    series->lastValue = value;
+    series->lastValue = &value;
     series->totalSamples++;
     return TSDB_OK;
 }
@@ -625,7 +625,7 @@ int SeriesCalcRange(Series *series,
     void *context = aggObject->createContext();
 
     while (SeriesIteratorGetNext(&iterator, &sample) == CR_OK) {
-        aggObject->appendValue(context, sample.value);
+        aggObject->appendValue(context, *((double *)sample.value));
     }
     SeriesIteratorClose(&iterator);
     if (val == NULL) { // just update context for current window

@@ -422,7 +422,7 @@ void ReplyWithSeriesLastDatapoint(RedisModuleCtx *ctx, const Series *series) {
     if (SeriesGetNumSamples(series) == 0) {
         RedisModule_ReplyWithArray(ctx, 0);
     } else {
-        ReplyWithSample(ctx, series->lastTimestamp, series->lastValue);
+        ReplyWithSample(ctx, series->lastTimestamp, *((double *)series->lastValue));
     }
 }
 
@@ -681,7 +681,7 @@ int ReplySeriesRange(RedisModuleCtx *ctx,
         // No aggregation
         while (SeriesIteratorGetNext(&iterator, &sample) == CR_OK &&
                (maxResults == -1 || arraylen < maxResults)) {
-            ReplyWithSample(ctx, sample.timestamp, sample.value);
+            ReplyWithSample(ctx, sample.timestamp, *((double *)sample.value));
             arraylen++;
         }
     } else {
@@ -709,7 +709,7 @@ int ReplySeriesRange(RedisModuleCtx *ctx,
                 last_agg_timestamp = sample.timestamp - (sample.timestamp % time_delta);
             }
             firstSample = FALSE;
-            aggObject->appendValue(context, sample.value);
+            aggObject->appendValue(context, *((double *)sample.value));
         }
     }
     SeriesIteratorClose(&iterator);
@@ -1132,7 +1132,7 @@ int TSDB_incrby(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
             ctx, "TSDB: for incrby/decrby, timestamp should be newer than the lastest one");
     }
 
-    double result = series->lastValue;
+    double result = *((double *)series->lastValue);
     RMUtil_StringToLower(argv[0]);
     if (RMUtil_StringEqualsC(argv[0], "ts.incrby")) {
         result += incrby;
