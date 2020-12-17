@@ -695,7 +695,7 @@ int ReplySeriesRange(RedisModuleCtx *ctx,
         while (SeriesIteratorGetNext(&iterator, &sample, &stringSample, isString) == CR_OK &&
                (maxResults == -1 || arraylen < maxResults)) {
             if (isString) {
-                ReplyWithStringSample(ctx, sample.timestamp, stringSample.value);
+                ReplyWithStringSample(ctx, stringSample.timestamp, stringSample.value);
             } else {
                 ReplyWithSample(ctx, sample.timestamp, sample.value);
             }
