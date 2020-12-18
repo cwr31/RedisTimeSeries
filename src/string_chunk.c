@@ -85,8 +85,9 @@ ChunkResult String_AddSample(Chunk_t *chunk, Sample *sample) {
     }
 
 //    regChunk->samples[regChunk->num_samples] = *sample;
-    regChunk->samples[regChunk->num_samples].timestamp = sample->timestamp;
-    size_t len = strlen(((char *)sample->value));
+//    regChunk->samples
+//    regChunk->samples[regChunk->num_samples].timestamp = sample->timestamp;
+//    size_t len = strlen(((char *)sample->value));
     strcpy(regChunk->samples[regChunk->num_samples].value, sample->value);
 //    regChunk->samples[regChunk->num_samples].value = ((char *)sample->value);
 //    memcpy(regChunk->samples[regChunk->num_samples].value, sample->value, strlen((const char *)sample->value));

@@ -18,7 +18,7 @@ typedef struct StringChunk {
 } StringChunk;
 
 typedef struct StringChunkIterator {
-    Chunk *chunk;
+    struct StringChunk *chunk;
     int currentIndex;
     timestamp_t lastTimestamp;
     int lastValue;

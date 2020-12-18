@@ -10,6 +10,7 @@
 #include "endianconv.h"
 #include "indexer.h"
 #include "module.h"
+#include "string_chunk.h"
 
 #include <assert.h>
 #include <math.h>
@@ -59,6 +60,7 @@ Series *NewSeries(RedisModuleString *keyName, CreateCtx *cCtx) {
         newSeries->funcs = GetChunkClass(CHUNK_COMPRESSED);
     }
     Chunk_t *newChunk = newSeries->funcs->NewChunk(newSeries->chunkSizeBytes);
+    StringChunk *regChunk = (StringChunk *)newChunk;
     dictOperator(newSeries->chunks, newChunk, 0, DICT_OP_SET);
     newSeries->lastChunk = newChunk;
     return newSeries;

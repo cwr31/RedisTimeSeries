@@ -153,7 +153,8 @@ ChunkResult Compressed_UpsertSample(UpsertCtx *uCtx, int *size, DuplicatePolicy 
 }
 
 ChunkResult Compressed_AddSample(Chunk_t *chunk, Sample *sample) {
-    return Compressed_Append((CompressedChunk *)chunk, sample->timestamp, *((double *)sample->value));
+    CompressedChunk *chunk1 = (CompressedChunk *)chunk;
+    return Compressed_Append(chunk1, sample->timestamp, *((double *)sample->value));
 }
 
 u_int64_t Compressed_ChunkNumOfSample(Chunk_t *chunk) {

@@ -812,7 +812,8 @@ static inline int add(RedisModuleCtx *ctx,
                       RedisModuleString **argv,
                       int argc) {
     RedisModuleKey *key = RedisModule_OpenKey(ctx, keyName, REDISMODULE_READ | REDISMODULE_WRITE);
-    void *value;
+    double *doubleValue;
+    char *stringValue;
     api_timestamp_t timestamp;
 //    if ((RedisModule_StringToDouble(valueStr, &value) != REDISMODULE_OK))
 //        return RTS_ReplyGeneralError(ctx, "TSDB: invalid value");
@@ -847,14 +848,16 @@ static inline int add(RedisModuleCtx *ctx,
         }
     }
     bool isString = series->options & SERIES_OPT_STRING;
+    int rv = REDISMODULE_ERR;
     if(isString) {
         size_t len;
-        value = (void *) RedisModule_StringPtrLen(valueStr, &len);
+        stringValue = (void *) RedisModule_StringPtrLen(valueStr, &len);
+        rv = internalAdd(ctx, series, timestamp, stringValue, dp, isString);
     } else {
-        if ((RedisModule_StringToDouble(valueStr, (double *) &value) != REDISMODULE_OK))
+        if ((RedisModule_StringToDouble(valueStr, doubleValue) != REDISMODULE_OK))
             return RTS_ReplyGeneralError(ctx, "TSDB: invalid value");
+        rv = internalAdd(ctx, series, timestamp, doubleValue, dp, isString);
     }
-    int rv = internalAdd(ctx, series, timestamp, value, dp, isString);
     RedisModule_CloseKey(key);
     return rv;
 }
